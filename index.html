@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">Online Quiz Platform</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Nunito', sans-serif; background-color: #f0f9ff; font-size: 1.1rem; color: #1e3a8a; overflow-x: hidden; }
+        .title-font { font-family: 'Baloo 2', cursive; }
+        .shape-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .shape { position: absolute; background-color: var(--color); border-radius: 20%; animation: float 35s infinite ease-in-out; opacity: 0; }
+        @keyframes float {
+            0% { transform: translateY(110vh) translateX(var(--start-x)) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.7; } 90% { opacity: 0.7; }
+            100% { transform: translateY(-100px) translateX(var(--end-x)) rotate(720deg); opacity: 0; }
+        }
+        .card { background-color: #ffffff; border-radius: 1rem; padding: 2.5rem; border: 2px solid #075985; box-shadow: 8px 8px 0px #38bdf8; transition: all 0.3s ease; }
+        .card:hover { transform: translate(-4px, -4px); box-shadow: 12px 12px 0px #38bdf8; }
+        .action-button { background-color: #0ea5e9; color: #ffffff; padding: 0.8rem 1.5rem; border-radius: 0.75rem; font-family: 'Baloo 2', cursive; font-size: 1.2rem; transition: all 0.2s ease; width: 100%; border: 2px solid #082f49; box-shadow: 4px 4px 0px #082f49; }
+        .action-button:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0px #082f49; }
+        .action-button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #082f49; }
+        .action-button:disabled { background-color: #7dd3fc; box-shadow: 4px 4px 0px #0c4a6e; cursor: not-allowed; }
+        .hidden { display: none; }
+        .progress-bar-container { height: 18px; background-color: #e0f2fe; border: 2px solid #075985; border-radius: 9999px; margin-bottom: 1.5rem; padding: 3px; }
+        #progress-bar { height: 100%; background: linear-gradient(90deg, #38bdf8, #22d3ee); border-radius: 9999px; transition: width 0.3s ease-in-out; }
+        .option-button { background-color: #fafafa; color: #3f3f46; padding: 0.85rem 1.5rem; border-radius: 0.75rem; font-weight: 600; transition: all 0.2s ease; width: 100%; text-align: left; margin-bottom: 0.75rem; border: 2px solid #d4d4d8; }
+        .option-button:hover:not(.selected):not(:disabled) { transform: translateY(-2px); border-color: #0ea5e9; }
+        .option-button.correct { background-color: #dcfce7 !important; border-color: #22c55e !important; color: #15803d; }
+        .option-button.incorrect { background-color: #fee2e2 !important; border-color: #ef4444 !important; color: #b91c1c; }
+        .option-button.disabled { cursor: not-allowed; }
+        .input-field { width: 100%; padding: 0.75rem 1.25rem; border: 2px solid #d4d4d8; background-color: #fff; border-radius: 0.75rem; margin-bottom: 1rem; }
+        .input-field:focus { outline: none; border-color: #0ea5e9; }
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 40; display: flex; align-items: center; justify-content: center; }
+        .modal-content { z-index: 50; max-height: 90vh; overflow-y: auto; }
+        .admin-table { width: 100%; border-collapse: collapse; }
+        .admin-table th, .admin-table td { padding: 0.75rem; border: 1px solid #d4d4d8; text-align: left; }
+        .admin-table th { background-color: #f0f9ff; font-family: 'Baloo 2', cursive; }
+        .admin-table tr:nth-child(even) { background-color: #fafafa; }
+        .admin-table .action-cell { width: 120px; text-align: center; }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="shape-container"></div>
+    <div class="container max-w-5xl mx-auto p-4 md:p-8">
+        <header class="text-center my-10">
+            <img id="quiz-logo" src="" alt="Quiz Logo" class="mx-auto h-24 mb-4 hidden">
+            <h1 id="quiz-title" class="text-6xl title-font text-sky-700"></h1>
+            <p id="quiz-subtitle" class="text-2xl mt-2 text-cyan-500"></p>
+        </header>
+
+        <main>
+            <!-- Login Section -->
+            <div id="login-section" class="max-w-lg mx-auto space-y-8">
+                <div class="card">
+                    <h2 class="text-3xl font-bold text-slate-800 mb-4 title-font">Instructions</h2>
+                    <ul id="instructions-list" class="list-disc list-inside space-y-2 text-slate-700"></ul>
+                </div>
+                <div class="card">
+                    <h2 class="text-3xl font-bold text-slate-800 mb-4 title-font">Start Your Quest</h2>
+                    <div>
+                        <input type="number" id="student-roll" class="input-field" placeholder="Participant ID (Roll)" required>
+                        <input type="password" id="pin-input" class="input-field" placeholder="Access Code (PIN)" required>
+                        <button id="login-button" class="action-button mt-2">Start Quiz</button>
+                        <button id="leaderboard-button" class="action-button mt-4" style="background-color: #0891b2;">View Leaderboard</button>
+                        <p id="error-message" class="text-red-600 mt-4 hidden text-center font-bold"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quiz Section -->
+            <div id="quiz-section" class="card hidden">
+                <div class="flex justify-between items-center mb-4 font-bold">
+                    <p class="text-slate-800">Score: <span id="current-score" class="title-font text-2xl text-sky-600">0</span></p>
+                    <p class="text-slate-800">Question <span id="question-number">1</span>/<span id="total-questions">0</span></p>
+                    <span id="timer" class="title-font text-2xl text-cyan-500"></span>
+                </div>
+                <div class="progress-bar-container"><div id="progress-bar"></div></div>
+                <h2 id="question-text" class="text-2xl font-bold mb-6 text-slate-800 leading-tight">Loading the next question...</h2>
+                <div id="options-container"></div>
+                <p id="feedback" class="text-center font-bold text-4xl mt-4 hidden title-font"></p>
+            </div>
+
+            <!-- Result Section -->
+            <div id="result-section" class="card hidden text-center">
+                <h2 class="text-5xl title-font mb-4 text-sky-700">Quest Complete!</h2>
+                <div class="grid md:grid-cols-2 gap-4 text-left my-6">
+                    <div class="bg-sky-50 p-4 rounded-lg border border-sky-200">
+                        <p class="text-slate-800 font-bold"><strong>Participant Name:</strong> <span id="participant-name"></span></p>
+                        <p class="text-slate-800 font-bold"><strong>Participant ID:</strong> <span id="participant-roll"></span></p>
+                    </div>
+                    <div class="bg-sky-50 p-4 rounded-lg border border-sky-200">
+                        <p class="text-slate-800 font-bold"><strong>Time Taken:</strong> <span id="time-taken"></span></p>
+                        <p class="text-slate-800 font-bold"><strong>Accuracy:</strong> <span id="accuracy"></span>%</p>
+                    </div>
+                </div>
+                <p class="text-3xl font-bold my-4 text-slate-800">Final Score: <span id="final-score">0</span> / <span id="final-total">0</span></p>
+                <div class="max-w-md mx-auto my-6">
+                    <canvas id="result-chart"></canvas>
+                </div>
+                <p id="submission-status" class="font-bold"></p>
+                <button id="toggle-review-button" class="action-button mt-6 max-w-sm mx-auto">Answer Review</button>
+            </div>
+
+            <!-- Answer Review Section -->
+            <div id="answer-review-section" class="hidden mt-8">
+                <h3 class="text-4xl title-font text-center mb-6 text-sky-700">Adventure Log</h3>
+                <div id="review-container" class="space-y-4"></div>
+            </div>
+
+            <!-- Admin Login Section -->
+            <div id="admin-login-section" class="max-w-lg mx-auto space-y-8 hidden">
+                <div class="card">
+                    <h2 class="text-3xl font-bold text-slate-800 mb-4 title-font">Admin Access</h2>
+                    <input type="password" id="admin-password" class="input-field" placeholder="Enter Admin Password">
+                    <button id="admin-login-button" class="action-button mt-2">Login</button>
+                    <p id="admin-error-message" class="text-red-600 mt-4 hidden text-center font-bold"></p>
+                </div>
+            </div>
+
+            <!-- Admin Panel Section -->
+            <div id="admin-panel-section" class="hidden space-y-8">
+                 <h2 class="text-4xl title-font text-center mb-6 text-sky-700">Admin Dashboard</h2>
+                 
+                 <!-- Quiz Settings Card -->
+                 <div class="card">
+                     <h3 class="text-2xl font-bold text-slate-800 mb-4 title-font">Quiz Settings</h3>
+                     <form id="settings-form" class="space-y-4">
+                        <div>
+                            <label class="font-bold">Quiz Title</label>
+                            <input type="text" id="form-quizTitle" class="input-field">
+                        </div>
+                        <div>
+                            <label class="font-bold">Quiz Subtitle</label>
+                            <input type="text" id="form-quizSubtitle" class="input-field">
+                        </div>
+                        <div>
+                            <label class="font-bold">Logo URL</label>
+                            <input type="text" id="form-logoUrl" class="input-field" placeholder="https://example.com/logo.png">
+                        </div>
+                        <div>
+                            <label class="font-bold">Instruction 1</label>
+                            <input type="text" id="form-instruction1" class="input-field">
+                        </div>
+                        <div>
+                            <label class="font-bold">Instruction 2</label>
+                            <input type="text" id="form-instruction2" class="input-field">
+                        </div>
+                        <div>
+                            <label class="font-bold">Admin Password</label>
+                            <input type="password" id="form-adminPassword" class="input-field" placeholder="Leave blank to keep current password">
+                        </div>
+                        <button type="submit" id="save-settings-button" class="action-button">Save Settings</button>
+                     </form>
+                 </div>
+
+                 <!-- Manage Questions Card -->
+                 <div class="card">
+                     <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-2xl font-bold text-slate-800 title-font">Manage Questions</h3>
+                        <button id="add-question-button" class="action-button !w-auto !text-base !p-2">Add New Question</button>
+                     </div>
+                     <div class="overflow-x-auto">
+                        <table id="questions-table" class="admin-table"></table>
+                     </div>
+                 </div>
+
+                 <!-- Manage Participants Card -->
+                 <div class="card">
+                     <h3 class="text-2xl font-bold text-slate-800 mb-4 title-font">Manage Participants</h3>
+                     <input type="text" id="participants-search" class="input-field" placeholder="Search by Name or Roll...">
+                     <div class="overflow-x-auto">
+                        <table id="participants-table" class="admin-table"></table>
+                     </div>
+                 </div>
+
+                 <!-- All Results Card -->
+                 <div class="card">
+                     <h3 class="text-2xl font-bold text-slate-800 mb-4 title-font">All Results</h3>
+                     <input type="text" id="results-search" class="input-field" placeholder="Search by Name or Roll...">
+                     <div class="overflow-x-auto">
+                        <table id="all-results-table" class="admin-table"></table>
+                     </div>
+                 </div>
+            </div>
+        </main>
+        
+        <footer class="text-center mt-16 pt-8">
+            <p class="text-sm font-bold text-slate-600">Copyright Reserved © 2025 | Fahad Bin Mamun</p>
+            <p><a href="#" id="admin-panel-link" class="text-sm text-sky-600 hover:underline">Admin Panel</a></p>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="leaderboard-modal" class="modal-backdrop hidden">
+        <div class="modal-content card w-11/12 max-w-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-3xl title-font text-sky-700">Top 10 Adventurers</h2>
+                <button id="close-leaderboard-button" class="text-2xl font-bold text-red-500">&times;</button>
+            </div>
+            <div id="leaderboard-content" class="overflow-x-auto"></div>
+        </div>
+    </div>
+    <div id="question-modal" class="modal-backdrop hidden">
+        <div class="modal-content card w-11/12 max-w-2xl">
+            <h2 id="question-modal-title" class="text-3xl title-font text-sky-700 mb-4">Add New Question</h2>
+            <form id="question-form">
+                <input type="hidden" id="question-id">
+                <div class="space-y-4">
+                    <div>
+                        <label class="font-bold">Question</label>
+                        <textarea id="form-question" class="input-field" rows="2" required></textarea>
+                    </div>
+                    <div>
+                        <label class="font-bold">Option 1</label>
+                        <input type="text" id="form-option1" class="input-field" required>
+                    </div>
+                    <div>
+                        <label class="font-bold">Option 2</label>
+                        <input type="text" id="form-option2" class="input-field" required>
+                    </div>
+                    <div>
+                        <label class="font-bold">Option 3</label>
+                        <input type="text" id="form-option3" class="input-field" required>
+                    </div>
+                    <div>
+                        <label class="font-bold">Option 4</label>
+                        <input type="text" id="form-option4" class="input-field" required>
+                    </div>
+                    <div>
+                        <label class="font-bold">Correct Answer</label>
+                        <input type="text" id="form-answer" class="input-field" required placeholder="Must match one of the options exactly">
+                    </div>
+                     <div>
+                        <label class="font-bold">Explanation</label>
+                        <textarea id="form-explanation" class="input-field" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="flex gap-4 mt-6">
+                    <button type="button" id="close-question-modal-button" class="action-button" style="background-color: #ef4444;">Cancel</button>
+                    <button type="submit" id="save-question-button" class="action-button">Save Question</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- SCRIPT_URL updated with the one you provided ---
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxA7Oqi6OHxUByub2C4VyD4v4ue7i5hOGGCpTIhO8hjsXUx4Y2SC9Zs4vEgrIKCehnImA/exec'; 
+        
+        // --- DOM ELEMENTS ---
+        const pageTitle = document.getElementById('page-title');
+        const quizLogo = document.getElementById('quiz-logo');
+        const quizTitle = document.getElementById('quiz-title');
+        const quizSubtitle = document.getElementById('quiz-subtitle');
+        const instructionsList = document.getElementById('instructions-list');
+        const settingsForm = document.getElementById('settings-form');
+        const loginSection = document.getElementById('login-section');
+        const studentRollInput = document.getElementById('student-roll');
+        const pinInput = document.getElementById('pin-input');
+        const loginButton = document.getElementById('login-button');
+        const errorMessage = document.getElementById('error-message');
+        const quizSection = document.getElementById('quiz-section');
+        const questionNumberSpan = document.getElementById('question-number');
+        const totalQuestionsSpan = document.getElementById('total-questions');
+        const questionTextElement = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const currentScoreSpan = document.getElementById('current-score');
+        const feedbackElement = document.getElementById('feedback');
+        const resultSection = document.getElementById('result-section');
+        const participantNameSpan = document.getElementById('participant-name');
+        const participantRollSpan = document.getElementById('participant-roll');
+        const finalScoreSpan = document.getElementById('final-score');
+        const finalTotalSpan = document.getElementById('final-total');
+        const submissionStatus = document.getElementById('submission-status');
+        const toggleReviewButton = document.getElementById('toggle-review-button');
+        const answerReviewSection = document.getElementById('answer-review-section');
+        const reviewContainer = document.getElementById('review-container');
+        const timerSpan = document.getElementById('timer');
+        const progressBar = document.getElementById('progress-bar');
+        const timeTakenSpan = document.getElementById('time-taken');
+        const accuracySpan = document.getElementById('accuracy');
+        const resultChartCanvas = document.getElementById('result-chart');
+        const leaderboardButton = document.getElementById('leaderboard-button');
+        const leaderboardModal = document.getElementById('leaderboard-modal');
+        const leaderboardContent = document.getElementById('leaderboard-content');
+        const closeLeaderboardButton = document.getElementById('close-leaderboard-button');
+        const adminPanelLink = document.getElementById('admin-panel-link');
+        const adminLoginSection = document.getElementById('admin-login-section');
+        const adminPasswordInput = document.getElementById('admin-password');
+        const adminLoginButton = document.getElementById('admin-login-button');
+        const adminErrorMessage = document.getElementById('admin-error-message');
+        const adminPanelSection = document.getElementById('admin-panel-section');
+        const participantsSearchInput = document.getElementById('participants-search');
+        const resultsSearchInput = document.getElementById('results-search');
+        const addQuestionButton = document.getElementById('add-question-button');
+        const questionModal = document.getElementById('question-modal');
+        const questionModalTitle = document.getElementById('question-modal-title');
+        const closeQuestionModalButton = document.getElementById('close-question-modal-button');
+        const questionForm = document.getElementById('question-form');
+
+        // --- Global State ---
+        let siteSettings = {};
+        let studentInfo = {};
+        let timerInterval;
+        let submittedAnswers = [];
+        let allQuestions = [];
+        let currentQuizQuestions = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let quizStartTime;
+        let unansweredCount = 0;
+        let resultChart;
+        let adminAllParticipants = [];
+        let adminAllResults = [];
+        let adminAllQuestions = [];
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', loadInitialData);
+
+        async function loadInitialData() {
+            const response = await apiCall('getSettings');
+            if (response && response.result === 'success') {
+                siteSettings = response.settings;
+                applySettings();
+            } else {
+                console.error("Could not load site settings.");
+                quizTitle.textContent = "Quiz Adventure";
+                quizSubtitle.textContent = "Test Your Wits and Wisdom!";
+            }
+        }
+
+        function applySettings() {
+            pageTitle.textContent = siteSettings.quizTitle || 'Online Quiz Platform';
+            quizTitle.textContent = siteSettings.quizTitle || 'Quiz Adventure';
+            quizSubtitle.textContent = siteSettings.quizSubtitle || 'Test Your Wits and Wisdom!';
+            
+            if (siteSettings.logoUrl) {
+                quizLogo.src = siteSettings.logoUrl;
+                quizLogo.classList.remove('hidden');
+            } else {
+                quizLogo.classList.add('hidden');
+            }
+
+            instructionsList.innerHTML = `
+                <li>${siteSettings.instruction1 || 'Default instruction 1.'}</li>
+                <li>${siteSettings.instruction2 || 'Default instruction 2.'}</li>
+            `;
+        }
+
+        // --- API Communication ---
+        async function apiCall(action, data = {}) {
+            if (SCRIPT_URL.includes('YOUR_NEW_APPS_SCRIPT_URL_HERE')) {
+                const errorMsg = "Developer Error: SCRIPT_URL is not set.";
+                if(action !== 'getSettings') showError(errorMsg);
+                console.error(errorMsg);
+                return { result: 'error', message: 'Script URL not configured.' };
+            }
+            const payload = { action, ...data };
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST', body: JSON.stringify(payload), redirect: 'follow',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                });
+                if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API Call Error:', error);
+                const errorMessageText = 'Connection to server failed. Please check your internet connection and the SCRIPT_URL.';
+                if (action !== 'getSettings') {
+                    showError(errorMessageText);
+                } else {
+                    console.error(errorMessageText);
+                }
+                return { result: 'error', message: errorMessageText };
+            }
+        }
+        
+        // --- Main Functions ---
+        async function handleLogin() {
+            const roll = studentRollInput.value.trim();
+            const pin = pinInput.value.trim();
+            if (!roll || !pin) { showError("Participant ID and Access Code are required!"); return; }
+            loginButton.disabled = true;
+            loginButton.textContent = "Loading...";
+            errorMessage.classList.add('hidden');
+            const response = await apiCall('verifyLogin', { roll, pin });
+            if (response.result === 'success') {
+                studentInfo = { name: response.name, roll: roll };
+                loginButton.textContent = "Starting...";
+                getQuestionsFromServer();
+            } else {
+                showError(response.message);
+                loginButton.disabled = false;
+                loginButton.textContent = "Start Quiz";
+            }
+        }
+        
+        async function getQuestionsFromServer() {
+            const response = await apiCall('getQuestions');
+            if (response.result === 'success' && response.questions.length > 0) {
+                allQuestions = response.questions;
+                startQuiz();
+            } else {
+                showError(response.message || "Could not load the adventure!");
+                loginButton.disabled = false;
+                loginButton.textContent = "Start Quiz";
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = `Oops! ${message}`;
+            errorMessage.classList.remove('hidden');
+        }
+
+        function startQuiz() {
+            loginSection.classList.add('hidden');
+            quizSection.classList.remove('hidden');
+            const QUESTIONS_PER_QUIZ = 20;
+            currentQuizQuestions = allQuestions.sort(() => 0.5 - Math.random()).slice(0, Math.min(QUESTIONS_PER_QUIZ, allQuestions.length));
+            totalQuestionsSpan.textContent = currentQuizQuestions.length;
+            quizStartTime = new Date();
+            loadQuestion();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            const TIME_PER_QUESTION = 35;
+            let timeLeft = TIME_PER_QUESTION;
+            timerSpan.textContent = timeLeft;
+            progressBar.style.width = '100%';
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerSpan.textContent = timeLeft;
+                progressBar.style.width = `${(timeLeft / TIME_PER_QUESTION) * 100}%`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    unansweredCount++;
+                    handleAnswer(null, "No Answer (Time Out)");
+                }
+            }, 1000);
+        }
+
+        function loadQuestion() {
+            if (currentQuestionIndex >= currentQuizQuestions.length) { showResult(); return; }
+            const questionData = currentQuizQuestions[currentQuestionIndex];
+            questionNumberSpan.textContent = currentQuestionIndex + 1;
+            questionTextElement.textContent = questionData.question;
+            optionsContainer.innerHTML = '';
+            feedbackElement.classList.add('hidden');
+            const shuffledOptions = [...questionData.options].sort(() => 0.5 - Math.random());
+            shuffledOptions.forEach(optionText => {
+                const button = document.createElement('button');
+                button.className = 'option-button';
+                button.textContent = optionText;
+                button.addEventListener('click', () => handleAnswer(button, optionText));
+                optionsContainer.appendChild(button);
+            });
+            startTimer();
+        }
+
+        function handleAnswer(button, selectedOptionText) {
+            if (optionsContainer.querySelector('.disabled')) return;
+            clearInterval(timerInterval);
+            const questionData = currentQuizQuestions[currentQuestionIndex];
+            const correctOptionText = questionData.answer;
+            document.querySelectorAll('#options-container .option-button').forEach(btn => {
+                btn.classList.add('disabled');
+                if (btn.textContent === correctOptionText) btn.classList.add('correct');
+            });
+            submittedAnswers.push({
+                question: questionData.question, userAnswer: selectedOptionText,
+                correctAnswer: correctOptionText, explanation: questionData.explanation
+            });
+            if (selectedOptionText === correctOptionText) {
+                score++;
+                currentScoreSpan.textContent = score;
+                if(button) button.classList.add('correct');
+                feedbackElement.textContent = "Awesome!";
+                feedbackElement.style.color = '#22c55e';
+            } else {
+                if(button) button.classList.add('incorrect');
+                feedbackElement.textContent = `Whoops!`;
+                feedbackElement.style.color = '#ef4444';
+            }
+            feedbackElement.classList.remove('hidden');
+            const FEEDBACK_DELAY_MS = 1500;
+            setTimeout(() => {
+                currentQuestionIndex++;
+                loadQuestion();
+            }, FEEDBACK_DELAY_MS);
+        }
+
+        async function showResult() {
+            quizSection.classList.add('hidden');
+            resultSection.classList.remove('hidden');
+            const quizEndTime = new Date();
+            const timeDiffSeconds = Math.round((quizEndTime - quizStartTime) / 1000);
+            const minutes = Math.floor(timeDiffSeconds / 60);
+            const seconds = timeDiffSeconds % 60;
+            const accuracy = currentQuizQuestions.length > 0 ? ((score / currentQuizQuestions.length) * 100).toFixed(1) : 0;
+            participantNameSpan.textContent = studentInfo.name || 'N/A';
+            participantRollSpan.textContent = studentInfo.roll || 'N/A';
+            timeTakenSpan.textContent = `${minutes}m ${seconds}s`;
+            accuracySpan.textContent = accuracy;
+            finalScoreSpan.textContent = score;
+            finalTotalSpan.textContent = currentQuizQuestions.length;
+            displayAnswerReview();
+            displayResultChart(score, currentQuizQuestions.length - score - unansweredCount, unansweredCount);
+            submissionStatus.textContent = 'Saving your adventure...';
+            submissionStatus.style.color = '#0ea5e9';
+            const response = await apiCall('submitResult', {
+                studentName: studentInfo.name, studentRoll: studentInfo.roll,
+                totalScore: score, totalQuestions: currentQuizQuestions.length,
+                accuracy: accuracy, timeTaken: `${minutes}m ${seconds}s`,
+                quizResultsJSON: JSON.stringify(submittedAnswers)
+            });
+            if (response.result === 'success') {
+                submissionStatus.textContent = 'Adventure saved!';
+                submissionStatus.style.color = '#22c55e';
+            } else {
+                submissionStatus.textContent = 'Saving failed: ' + (response.message || 'Unknown error');
+                submissionStatus.style.color = '#ef4444';
+            }
+        }
+
+        function displayResultChart(correct, incorrect, unanswered) {
+            if (resultChart) resultChart.destroy();
+            resultChart = new Chart(resultChartCanvas, {
+                type: 'bar',
+                data: {
+                    labels: ['Correct', 'Incorrect', 'Not Answered'],
+                    datasets: [{
+                        label: 'Answers', data: [correct, incorrect, unanswered],
+                        backgroundColor: ['#22c55e', '#ef4444', '#a1a1aa'], borderRadius: 8,
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+
+        function displayAnswerReview() {
+            reviewContainer.innerHTML = ''; 
+            submittedAnswers.forEach((result, index) => {
+                const isCorrect = result.userAnswer === result.correctAnswer;
+                const reviewBlock = document.createElement('div');
+                reviewBlock.className = 'card p-4';
+                reviewBlock.innerHTML = `
+                    <p class="font-bold text-lg text-slate-800">${index + 1}. ${result.question}</p>
+                    <p class="mt-2 font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'}">Your Answer: ${result.userAnswer || 'N/A'}</p>
+                    ${!isCorrect ? `<p class="mt-1 font-bold text-green-600">Correct Answer: ${result.correctAnswer}</p>` : ''}
+                    <p class="mt-2 text-slate-600 border-t-2 border-dashed border-slate-400 pt-2"><strong>Note:</strong> ${result.explanation || 'N/A'}</p>`;
+                reviewContainer.appendChild(reviewBlock);
+            });
+        }
+
+        // --- Leaderboard Functions ---
+        async function showLeaderboard() {
+            leaderboardContent.innerHTML = '<p class="text-center">Loading Top Adventurers...</p>';
+            leaderboardModal.classList.remove('hidden');
+            const response = await apiCall('getLeaderboard');
+            if (response.result === 'success') {
+                let tableHTML = '<table class="admin-table"><thead><tr><th>Rank</th><th>Name</th><th>Score</th></tr></thead><tbody>';
+                if (response.leaderboard.length > 0) {
+                    const QUESTIONS_PER_QUIZ = 20;
+                    response.leaderboard.forEach((player, index) => {
+                        tableHTML += `<tr><td>${index + 1}</td><td>${player.name}</td><td>${player.score} / ${QUESTIONS_PER_QUIZ}</td></tr>`;
+                    });
+                } else {
+                    tableHTML += '<tr><td colspan="3" class="text-center">No adventures recorded yet!</td></tr>';
+                }
+                leaderboardContent.innerHTML = tableHTML + '</tbody></table>';
+            } else {
+                leaderboardContent.innerHTML = `<p class="text-center text-red-600">${response.message}</p>`;
+            }
+        }
+
+        // --- Admin Panel Functions ---
+        function showAdminLogin() {
+            loginSection.classList.add('hidden');
+            adminLoginSection.classList.remove('hidden');
+        }
+
+        async function handleAdminLogin() {
+            const password = adminPasswordInput.value;
+            if (!password) { adminErrorMessage.textContent = 'Password is required.'; adminErrorMessage.classList.remove('hidden'); return; }
+            adminLoginButton.disabled = true;
+            adminLoginButton.textContent = 'Verifying...';
+            const response = await apiCall('adminLogin', { password }); 
+            if (response.result === 'success') {
+                adminLoginSection.classList.add('hidden');
+                adminPanelSection.classList.remove('hidden');
+                loadAdminData();
+                populateSettingsForm();
+            } else {
+                adminErrorMessage.textContent = response.message;
+                adminErrorMessage.classList.remove('hidden');
+                adminLoginButton.disabled = false;
+                adminLoginButton.textContent = 'Login';
+            }
+        }
+        
+        async function loadAdminData() {
+            const [participantsRes, resultsRes, questionsRes] = await Promise.all([
+                apiCall('getParticipants'),
+                apiCall('getAllResults'),
+                apiCall('getQuestionsForAdmin')
+            ]);
+            
+            adminAllParticipants = participantsRes.result === 'success' ? participantsRes.participants : [];
+            adminAllResults = resultsRes.result === 'success' ? resultsRes.results : [];
+            adminAllQuestions = questionsRes.result === 'success' ? questionsRes.questions : [];
+            
+            renderParticipantsTable();
+            renderResultsTable();
+            renderQuestionsTable();
+        }
+
+        function renderParticipantsTable(searchTerm = '') {
+            const participantsTable = document.getElementById('participants-table');
+            const filtered = adminAllParticipants.filter(p => p.name.toLowerCase().includes(searchTerm) || p.roll.toString().includes(searchTerm));
+            let pTableHTML = '<thead><tr><th>Roll</th><th>Name</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+            if(filtered.length > 0) {
+                filtered.forEach(p => {
+                    pTableHTML += `<tr>
+                        <td>${p.roll}</td><td>${p.name}</td>
+                        <td><span class="font-bold ${p.status === 'USED' ? 'text-red-500' : 'text-green-500'}">${p.status}</span></td>
+                        <td class="action-cell">${p.status === 'USED' ? `<button class="action-button !p-2 !text-sm" onclick="resetParticipant('${p.roll}')">Reset</button>` : ''}</td>
+                    </tr>`;
+                });
+            } else { pTableHTML += '<tr><td colspan="4" class="text-center">No participants found.</td></tr>'; }
+            participantsTable.innerHTML = pTableHTML + '</tbody>';
+        }
+
+        function renderResultsTable(searchTerm = '') {
+            const resultsTable = document.getElementById('all-results-table');
+            const filtered = adminAllResults.filter(r => r.name.toLowerCase().includes(searchTerm) || r.roll.toString().includes(searchTerm));
+            let rTableHTML = '<thead><tr><th>Timestamp</th><th>Name</th><th>Roll</th><th>Score</th><th>Accuracy</th><th>Time Taken</th></tr></thead><tbody>';
+            if(filtered.length > 0) {
+                filtered.forEach(r => {
+                    rTableHTML += `<tr>
+                        <td>${new Date(r.timestamp).toLocaleString()}</td><td>${r.name}</td><td>${r.roll}</td>
+                        <td>${r.score} / ${r.totalQuestions}</td><td>${r.accuracy}%</td><td>${r.timeTaken}</td>
+                    </tr>`;
+                });
+            } else { rTableHTML += '<tr><td colspan="6" class="text-center">No results found.</td></tr>'; }
+            resultsTable.innerHTML = rTableHTML + '</tbody>';
+        }
+        
+        function renderQuestionsTable() {
+            const questionsTable = document.getElementById('questions-table');
+            let qTableHTML = '<thead><tr><th>Question</th><th>Answer</th><th class="action-cell">Actions</th></tr></thead><tbody>';
+            if(adminAllQuestions.length > 0) {
+                adminAllQuestions.forEach(q => {
+                    qTableHTML += `<tr>
+                        <td class="w-3/4">${q.question}</td>
+                        <td>${q.answer}</td>
+                        <td class="action-cell">
+                            <div class="flex gap-2">
+                                <button class="action-button !p-2 !text-sm !w-auto" style="background-color: #f59e0b;" onclick="openQuestionModalForEdit(${q.id})">Edit</button>
+                                <button class="action-button !p-2 !text-sm !w-auto" style="background-color: #ef4444;" onclick="deleteQuestion(${q.id})">Delete</button>
+                            </div>
+                        </td>
+                    </tr>`;
+                });
+            } else { qTableHTML += '<tr><td colspan="3" class="text-center">No questions found.</td></tr>'; }
+            questionsTable.innerHTML = qTableHTML + '</tbody>';
+        }
+        
+        async function resetParticipant(roll) {
+            if (!confirm(`Are you sure you want to reset the status for roll number ${roll}?`)) return;
+            const response = await apiCall('resetParticipantStatus', { roll });
+            if (response.result === 'success') { alert('Status reset successfully!'); loadAdminData(); } 
+            else { alert('Failed to reset status: ' + response.message); }
+        }
+        
+        function populateSettingsForm() {
+            document.getElementById('form-quizTitle').value = siteSettings.quizTitle || '';
+            document.getElementById('form-quizSubtitle').value = siteSettings.quizSubtitle || '';
+            document.getElementById('form-logoUrl').value = siteSettings.logoUrl || '';
+            document.getElementById('form-instruction1').value = siteSettings.instruction1 || '';
+            document.getElementById('form-instruction2').value = siteSettings.instruction2 || '';
+        }
+
+        async function handleSettingsFormSubmit(event) {
+            event.preventDefault();
+            const saveButton = document.getElementById('save-settings-button');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
+
+            const newSettings = {
+                quizTitle: document.getElementById('form-quizTitle').value,
+                quizSubtitle: document.getElementById('form-quizSubtitle').value,
+                logoUrl: document.getElementById('form-logoUrl').value,
+                instruction1: document.getElementById('form-instruction1').value,
+                instruction2: document.getElementById('form-instruction2').value,
+            };
+            
+            const newPassword = document.getElementById('form-adminPassword').value;
+            if (newPassword) {
+                newSettings.adminPassword = newPassword;
+            }
+
+            const response = await apiCall('updateSettings', { settingsData: newSettings });
+
+            if (response.result === 'success') {
+                alert('Settings saved successfully! The page will now reload to apply changes.');
+                window.location.reload();
+            } else {
+                alert('Error saving settings: ' + response.message);
+                saveButton.disabled = false;
+                saveButton.textContent = 'Save Settings';
+            }
+        }
+
+        function openQuestionModalForAdd() {
+            questionForm.reset();
+            document.getElementById('question-id').value = '';
+            questionModalTitle.textContent = 'Add New Question';
+            questionModal.classList.remove('hidden');
+        }
+
+        function openQuestionModalForEdit(questionId) {
+            const question = adminAllQuestions.find(q => q.id === questionId);
+            if (!question) return;
+            questionForm.reset();
+            document.getElementById('question-id').value = question.id;
+            document.getElementById('form-question').value = question.question;
+            document.getElementById('form-option1').value = question.options[0] || '';
+            document.getElementById('form-option2').value = question.options[1] || '';
+            document.getElementById('form-option3').value = question.options[2] || '';
+            document.getElementById('form-option4').value = question.options[3] || '';
+            document.getElementById('form-answer').value = question.answer;
+            document.getElementById('form-explanation').value = question.explanation;
+            questionModalTitle.textContent = 'Edit Question';
+            questionModal.classList.remove('hidden');
+        }
+
+        async function handleQuestionFormSubmit(event) {
+            event.preventDefault();
+            const saveButton = document.getElementById('save-question-button');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
+
+            const questionData = {
+                id: document.getElementById('question-id').value,
+                question: document.getElementById('form-question').value,
+                options: [
+                    document.getElementById('form-option1').value,
+                    document.getElementById('form-option2').value,
+                    document.getElementById('form-option3').value,
+                    document.getElementById('form-option4').value,
+                ],
+                answer: document.getElementById('form-answer').value,
+                explanation: document.getElementById('form-explanation').value,
+            };
+            
+            const action = questionData.id ? 'updateQuestion' : 'addQuestion';
+            const response = await apiCall(action, { questionData });
+
+            if (response.result === 'success') {
+                alert('Question saved successfully!');
+                questionModal.classList.add('hidden');
+                loadAdminData();
+            } else {
+                alert('Error saving question: ' + response.message);
+            }
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Question';
+        }
+
+        async function deleteQuestion(questionId) {
+            if (!confirm('Are you sure you want to delete this question permanently?')) return;
+            const response = await apiCall('deleteQuestion', { questionId });
+            if (response.result === 'success') {
+                alert('Question deleted successfully!');
+                loadAdminData();
+            } else {
+                alert('Error deleting question: ' + response.message);
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        loginButton.addEventListener('click', handleLogin);
+        leaderboardButton.addEventListener('click', showLeaderboard);
+        closeLeaderboardButton.addEventListener('click', () => leaderboardModal.classList.add('hidden'));
+        adminPanelLink.addEventListener('click', (e) => { e.preventDefault(); showAdminLogin(); });
+        adminLoginButton.addEventListener('click', handleAdminLogin);
+        participantsSearchInput.addEventListener('input', (e) => renderParticipantsTable(e.target.value.toLowerCase()));
+        resultsSearchInput.addEventListener('input', (e) => renderResultsTable(e.target.value.toLowerCase()));
+        addQuestionButton.addEventListener('click', openQuestionModalForAdd);
+        closeQuestionModalButton.addEventListener('click', () => questionModal.classList.add('hidden'));
+        questionForm.addEventListener('submit', handleQuestionFormSubmit);
+        settingsForm.addEventListener('submit', handleSettingsFormSubmit);
+        toggleReviewButton.addEventListener('click', () => answerReviewSection.classList.toggle('hidden'));
+    </script>
+</body>
+</html>
