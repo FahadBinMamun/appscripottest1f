@@ -1,0 +1,300 @@
+/**
+ * Main function to handle POST requests from the web app.
+ * Acts as an API endpoint.
+ * @param {object} e - The event parameter containing POST data.
+ * @returns {ContentService.TextOutput} - JSON response.
+ */
+function doPost(e) {
+  try {
+    const requestData = JSON.parse(e.postData.contents);
+    const action = requestData.action;
+    let responseData;
+
+    switch (action) {
+      // Settings Actions
+      case 'getSettings':
+        responseData = getSettings();
+        break;
+      case 'updateSettings':
+        responseData = updateSettings(requestData.settingsData);
+        break;
+      
+      // User Facing Actions
+      case 'verifyLogin':
+        responseData = verifyLogin(requestData);
+        break;
+      case 'getQuestions':
+        responseData = getQuestions();
+        break;
+      case 'submitResult':
+        responseData = submitResult(requestData);
+        break;
+      case 'getLeaderboard':
+        responseData = getLeaderboard();
+        break;
+      
+      // Admin Panel Actions
+      case 'adminLogin':
+        responseData = verifyAdminLogin(requestData);
+        break;
+      case 'getParticipants':
+        responseData = getParticipants();
+        break;
+      case 'getAllResults':
+        responseData = getAllResults();
+        break;
+      case 'resetParticipantStatus':
+        responseData = resetParticipantStatus(requestData);
+        break;
+      case 'getQuestionsForAdmin':
+        responseData = getQuestionsForAdmin();
+        break;
+      case 'addQuestion':
+        responseData = addQuestion(requestData.questionData);
+        break;
+      case 'updateQuestion':
+        responseData = updateQuestion(requestData.questionData);
+        break;
+      case 'deleteQuestion':
+        responseData = deleteQuestion(requestData.questionId);
+        break;
+
+      default:
+        responseData = { result: "error", message: "Invalid action specified." };
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responseData))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    Logger.log(error.toString() + " at " + error.stack);
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "Server error: " + error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// --- Sheet Name Constants ---
+const STUDENTS_SHEET_NAME = "Students";
+const QUESTIONS_SHEET_NAME = "Questions";
+const RESULTS_SHEET_NAME = "Results";
+const LEADERBOARD_SHEET_NAME = "Leaderboard";
+const SETTINGS_SHEET_NAME = "Settings";
+
+// --- Settings Functions ---
+function getSettings() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SETTINGS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SETTINGS_SHEET_NAME);
+    sheet.appendRow(['Key', 'Value']);
+    sheet.appendRow(['quizTitle', 'Quiz Adventure']);
+    sheet.appendRow(['quizSubtitle', 'Test Your Wits and Wisdom!']);
+    sheet.appendRow(['logoUrl', 'https://i.ibb.co/9vqy2y9/quiz-logo.png']);
+    sheet.appendRow(['instruction1', 'You have one chance to complete the adventure!']);
+    sheet.appendRow(['instruction2', 'Each question has a 35-second time limit. Be quick!']);
+    sheet.appendRow(['adminPassword', 'admin123']);
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const settings = {};
+  for (let i = 1; i < data.length; i++) {
+    const key = data[i][0];
+    const value = data[i][1];
+    if (key) {
+      settings[key] = value;
+    }
+  }
+  return { result: 'success', settings: settings };
+}
+
+function updateSettings(settingsData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET_NAME);
+  if (!sheet) return { result: 'error', message: `'${SETTINGS_SHEET_NAME}' sheet not found.` };
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const key = data[i][0];
+    if (settingsData.hasOwnProperty(key)) {
+      sheet.getRange(i + 1, 2).setValue(settingsData[key]);
+    }
+  }
+  return { result: 'success' };
+}
+
+// --- User and Admin Login Functions ---
+function verifyLogin(requestData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STUDENTS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${STUDENTS_SHEET_NAME}' sheet not found.` };
+
+  const roll = requestData.roll.toString().trim();
+  const pin = requestData.pin.toString().trim();
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+
+  for (let i = 0; i < data.length; i++) {
+    if (data[i][0].toString().trim() === roll) {
+      if (data[i][2].toString().trim() === pin) {
+        if (data[i][3].toString().trim().toUpperCase() === 'UNUSED') {
+          sheet.getRange(i + 2, 4).setValue('USED');
+          return { result: "success", name: data[i][1] };
+        } else {
+          return { result: "error", message: "This ID and PIN have already been used." };
+        }
+      } else { return { result: "error", message: "Incorrect PIN." }; }
+    }
+  }
+  return { result: "error", message: "Participant ID not found." };
+}
+
+function verifyAdminLogin(requestData) {
+  const settings = getSettings().settings;
+  const correctPassword = settings.adminPassword || "admin123";
+  
+  return requestData.password === correctPassword 
+    ? { result: "success" } 
+    : { result: "error", message: "Incorrect admin password." };
+}
+
+// --- Data Retrieval Functions ---
+function getQuestions() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTIONS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${QUESTIONS_SHEET_NAME}' sheet not found.` };
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  const questionIndex = headers.indexOf('Question');
+  const option1Index = headers.indexOf('Option1');
+  const option2Index = headers.indexOf('Option2');
+  const option3Index = headers.indexOf('Option3');
+  const option4Index = headers.indexOf('Option4');
+  const correctIndex = headers.indexOf('CorrectAnswer');
+  const explanationIndex = headers.indexOf('Explanation');
+
+  const questionsArray = data.map(row => {
+    if (!row[questionIndex]) return null;
+    return {
+      question: row[questionIndex],
+      options: [row[option1Index], row[option2Index], row[option3Index], row[option4Index]].filter(opt => opt),
+      answer: row[correctIndex],
+      explanation: row[explanationIndex]
+    };
+  }).filter(q => q);
+  
+  return { result: 'success', questions: questionsArray };
+}
+
+function getLeaderboard() {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LEADERBOARD_SHEET_NAME);
+    if (!sheet || sheet.getLastRow() < 1) {
+        return { result: "error", message: "Leaderboard data not available yet." };
+    }
+    const data = sheet.getDataRange().getValues();
+    const leaderboardData = data.map(row => ({ name: row[0], roll: row[1], score: row[2] }));
+    return { result: 'success', leaderboard: leaderboardData };
+}
+
+function getParticipants() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STUDENTS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${STUDENTS_SHEET_NAME}' sheet not found.` };
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  const participants = data.map(row => ({ roll: row[0], name: row[1], status: row[3] }));
+  return { result: "success", participants: participants };
+}
+
+function getAllResults() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESULTS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${RESULTS_SHEET_NAME}' sheet not found.` };
+  if (sheet.getLastRow() < 2) return { result: "success", results: [] };
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
+  const results = data.map(row => ({
+    timestamp: row[0], name: row[1], roll: row[2], score: row[3],
+    totalQuestions: row[4], accuracy: row[5], timeTaken: row[6]
+  }));
+  return { result: "success", results: results.reverse() };
+}
+
+function getQuestionsForAdmin() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTIONS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${QUESTIONS_SHEET_NAME}' sheet not found.` };
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  const questionIndex = headers.indexOf('Question');
+  const option1Index = headers.indexOf('Option1');
+  const option2Index = headers.indexOf('Option2');
+  const option3Index = headers.indexOf('Option3');
+  const option4Index = headers.indexOf('Option4');
+  const correctIndex = headers.indexOf('CorrectAnswer');
+  const explanationIndex = headers.indexOf('Explanation');
+
+  const questionsArray = data.map((row, index) => {
+    if (!row[questionIndex]) return null;
+    return {
+      id: index + 2,
+      question: row[questionIndex],
+      options: [row[option1Index], row[option2Index], row[option3Index], row[option4Index]].filter(Boolean),
+      answer: row[correctIndex],
+      explanation: row[explanationIndex]
+    };
+  }).filter(Boolean);
+  
+  return { result: 'success', questions: questionsArray };
+}
+
+// --- Data Manipulation Functions ---
+function submitResult(requestData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESULTS_SHEET_NAME) || SpreadsheetApp.getActiveSpreadsheet().insertSheet(RESULTS_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'Name', 'Roll', 'Total Score', 'Total Questions', 'Accuracy', 'Time Taken', 'Quiz Results JSON']);
+  }
+  const { studentName, studentRoll, totalScore, totalQuestions, accuracy, timeTaken, quizResultsJSON } = requestData;
+  sheet.appendRow([new Date(), studentName, studentRoll, totalScore, totalQuestions, accuracy, timeTaken, quizResultsJSON]);
+  return { result: "success" };
+}
+
+function resetParticipantStatus(requestData) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STUDENTS_SHEET_NAME);
+  if (!sheet) return { result: "error", message: `'${STUDENTS_SHEET_NAME}' sheet not found.` };
+  const rollToReset = requestData.roll.toString().trim();
+  const rollColumn = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  for (let i = 0; i < rollColumn.length; i++) {
+    if (rollColumn[i][0].toString().trim() === rollToReset) {
+      sheet.getRange(i + 1, 4).setValue('UNUSED');
+      return { result: "success" };
+    }
+  }
+  return { result: "error", message: "Participant roll not found." };
+}
+
+function addQuestion(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTIONS_SHEET_NAME);
+  const newRow = [
+    data.question, data.options[0], data.options[1], data.options[2], data.options[3],
+    data.answer, data.explanation
+  ];
+  sheet.appendRow(newRow);
+  return { result: 'success' };
+}
+
+function updateQuestion(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTIONS_SHEET_NAME);
+  const rowId = parseInt(data.id);
+  if (!rowId || rowId < 2) return { result: 'error', message: 'Invalid question ID.' };
+  
+  const updatedRow = [
+    data.question, data.options[0], data.options[1], data.options[2], data.options[3],
+    data.answer, data.explanation
+  ];
+  sheet.getRange(rowId, 1, 1, 7).setValues([updatedRow]);
+  return { result: 'success' };
+}
+
+function deleteQuestion(questionId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(QUESTIONS_SHEET_NAME);
+  const rowId = parseInt(questionId);
+  if (!rowId || rowId < 2) return { result: 'error', message: 'Invalid question ID.' };
+  
+  sheet.deleteRow(rowId);
+  return { result: 'success' };
+}
